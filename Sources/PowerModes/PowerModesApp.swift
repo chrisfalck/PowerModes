@@ -59,16 +59,38 @@ enum Main {
         }
         let outcome = PowerController.pass(settings: controller.settings, enabled: false)
         controller.show(outcome)
-        let host = NSHostingView(rootView: ContentView(controller: controller))
+        // A rounded card on a clear window, so the PNG looks like the popover rather than a bare view.
+        let card = ContentView(controller: controller)
+            .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        let host = NSHostingView(rootView: card)
         host.frame = NSRect(origin: .zero, size: host.fittingSize)
-        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        // Invisible, but key in an active app: controls in a non-key window draw greyed out.
+        let window = SnapshotWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.alphaValue = 0
         window.contentView = host
-        host.layoutSubtreeIfNeeded()
-        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { exit(1) }
-        host.cacheDisplay(in: host.bounds, to: bitmap)
-        guard let png = bitmap.representation(using: .png, properties: [:]),
-              (try? png.write(to: URL(fileURLWithPath: path))) != nil else { exit(1) }
+        NSApp.setActivationPolicy(.accessory)
+        window.center()
+        // Activation only completes inside the app's own event loop, so capture from within it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            MainActor.assumeIsolated {
+                host.layoutSubtreeIfNeeded()
+                guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { exit(1) }
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                guard let png = bitmap.representation(using: .png, properties: [:]),
+                      (try? png.write(to: URL(fileURLWithPath: path))) != nil else { exit(1) }
+                exit(0)
+            }
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.run()
     }
+}
+
+private final class SnapshotWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
 }
 
 /// Owns the menu bar item and its popover. A popover sized from the SwiftUI content follows the
