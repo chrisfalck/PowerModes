@@ -23,8 +23,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
-codesign --force --sign - "$APP"
 xcrun clang -std=c11 -fobjc-arc -O2 -Wall -Wextra -Werror \
     -framework Foundation -framework CoreGraphics \
     Helper/power-modes-helper.m -o build/io.github.chrisfalck.powermodes.helper
+# The app's "Install Helper…" button installs these copies.
+mkdir -p "$APP/Contents/Resources"
+cp build/io.github.chrisfalck.powermodes.helper scripts/install-helper.sh "$APP/Contents/Resources/"
+codesign --force --sign - "$APP"
 echo "Built $APP and build/io.github.chrisfalck.powermodes.helper"

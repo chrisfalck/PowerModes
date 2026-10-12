@@ -25,6 +25,12 @@ Defaults:
 | High Power from | 80% | Never |
 | Automatic from | 21% | 51% |
 
+### Hysteresis
+
+A mode steps up as soon as the charge reaches its threshold, but steps down only once the charge is 3 points below it (`Policy.hysteresisMargin`). With the defaults, High Power on AC starts at 80% and is kept down to 77%, ending at 76%; Automatic on AC ends at 17%, and on battery at 47%. This stops the mode flipping when the charge hovers at a threshold, such as 79–80% on a charge-limited Mac.
+
+The margin is measured from the mode the profile is in now, so it also applies to a mode set by hand in System Settings. Moving a slider applies the thresholds exactly, with no margin, so the result matches what the sliders show.
+
 Settings are saved in the `io.github.chrisfalck.power-modes` defaults domain. "Reset to Defaults" restores the table above. "Switch modes automatically" off leaves the modes wherever they are.
 
 ## How it works
@@ -62,7 +68,9 @@ sudo ./scripts/install-helper.sh
 
 Installs the root helper and the sudoers rule, then checks that the rule is in effect.
 
-Until the second command has run, the app shows the modes but cannot change them.
+Instead of the second command, you can click **Install Helper…** in the app's popover. It runs the same script (bundled in the app with the helper) through the macOS administrator prompt. The button shows whenever the helper is missing or the sudoers rule is not in effect.
+
+Until the helper is installed, the app shows the modes but cannot change them.
 
 ## Checks
 
@@ -74,7 +82,7 @@ pmset -g custom
 sudo -n -l /Library/PrivilegedHelperTools/io.github.chrisfalck.powermodes.helper --set c 0
 ```
 
-`swift test` covers the default thresholds at every charge for both sources, threshold boundaries and clamping, the both-profile plan for every combination of starting modes, and `pmset -g custom` parsing. `--dry-run` prints what the saved settings would do now without changing anything. `--snapshot` renders the popover to a PNG.
+`swift test` covers the default thresholds at every charge for both sources, threshold boundaries and clamping, hysteresis, the both-profile plan for every combination of starting modes, and `pmset -g custom` parsing. `--dry-run` prints what the saved settings would do now without changing anything. `--snapshot` renders the popover to a PNG.
 
 ## Uninstall
 

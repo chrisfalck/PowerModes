@@ -55,6 +55,30 @@ enum SystemPower {
         return run("/usr/bin/sudo", ["-n", helperPath, verb, change.source.pmsetFlag, String(change.mode.rawValue)], timeout: 30)
     }
 
+    /// True when the helper is installed and the sudoers rule lets this user run it without a password.
+    static func helperReady() -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: helperPath) else { return false }
+        return run("/usr/bin/sudo", ["-n", "-l", helperPath, "--set", "c", "0"], timeout: 10).status == 0
+    }
+
+    /// Runs the bundled install script as root through the macOS administrator prompt.
+    /// Returns nil on success or if the user cancelled, otherwise what went wrong.
+    static func installHelper() -> String? {
+        guard let script = Bundle.main.path(forResource: "install-helper", ofType: "sh") else {
+            return "This copy of the app has no bundled installer. Run scripts/install-helper.sh with sudo."
+        }
+        // Arguments reach AppleScript through argv, so no path needs escaping into the script text.
+        let result = run("/usr/bin/osascript", [
+            "-e", "on run argv",
+            "-e", "do shell script \"/bin/sh \" & quoted form of item 1 of argv & \" --no-restart --user \" & quoted form of item 2 of argv with prompt \"Power Modes needs to install its helper to change power modes.\" with administrator privileges",
+            "-e", "end run",
+            script, NSUserName(),
+        ], timeout: 600)
+        if result.status == 0 { return nil }
+        let detail = result.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return detail.contains("-128") ? nil : "Helper install failed" + (detail.isEmpty ? "." : ": \(detail)")
+    }
+
     static func run(_ path: String, _ arguments: [String], timeout: TimeInterval) -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)

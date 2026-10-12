@@ -6,6 +6,15 @@ public enum PowerMode: Int, Codable, Sendable, CaseIterable {
     case low = 1
     case high = 2
 
+    /// Low < Automatic < High; the raw values are pmset's and not in this order.
+    var rank: Int {
+        switch self {
+        case .low: return 0
+        case .automatic: return 1
+        case .high: return 2
+        }
+    }
+
     public var label: String {
         switch self {
         case .automatic: return "Automatic"
@@ -67,6 +76,22 @@ public struct Thresholds: Codable, Equatable, Sendable {
         if percent >= autoMin { return .automatic }
         return .low
     }
+
+    /// Like `mode(at:)`, but a profile already in a higher mode keeps it until the charge is
+    /// `margin` points below the threshold it would otherwise drop at. Stepping up is never delayed.
+    public func mode(at percent: Int, holding current: PowerMode?, margin: Int) -> PowerMode {
+        let exact = mode(at: percent)
+        guard let current, margin > 0, current.rank > exact.rank else { return exact }
+        let held: PowerMode
+        if usesHighPower && percent >= highMin - margin {
+            held = .high
+        } else if percent >= autoMin - margin {
+            held = .automatic
+        } else {
+            held = .low
+        }
+        return held.rank < current.rank ? held : current
+    }
 }
 
 public struct PolicySettings: Codable, Equatable, Sendable {
@@ -100,14 +125,19 @@ public struct ModeChange: Equatable, Sendable {
 }
 
 public enum Policy {
+    /// How far below a threshold the charge must fall before the mode steps down, so a charge
+    /// hovering at a threshold (79–80% on a charge-limited Mac) does not flip the mode back and forth.
+    public static let hysteresisMargin = 3
+
     /// Changes needed so both profiles match the settings at this charge.
     /// Both profiles are kept current so plugging in or unplugging lands in the right mode at once.
     /// The profile in use comes last so a failure there cannot leave the other one stale.
+    /// `margin` 0 applies the thresholds exactly, which is what a threshold the user just moved should do.
     public static func plan(percent: Int, active: PowerSource, settings: PolicySettings,
-                            current: [PowerSource: PowerMode]) -> [ModeChange] {
+                            current: [PowerSource: PowerMode], margin: Int = 0) -> [ModeChange] {
         let order: [PowerSource] = active == .ac ? [.battery, .ac] : [.ac, .battery]
         return order.compactMap { source in
-            let desired = settings[source].mode(at: percent)
+            let desired = settings[source].mode(at: percent, holding: current[source], margin: margin)
             return current[source] == desired ? nil : ModeChange(source: source, mode: desired)
         }
     }

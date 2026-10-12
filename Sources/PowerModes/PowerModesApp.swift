@@ -24,12 +24,12 @@ enum Main {
         let (settings, enabled) = MainActor.assumeIsolated { (controller.settings, controller.enabled) }
         let outcome = PowerController.pass(settings: settings, enabled: enabled, dryRun: true)
         guard let battery = outcome.battery else { print("No battery found"); exit(1) }
-        print("\(battery.source.profileName) battery=\(battery.percent)% automatic-switching=\(enabled ? "on" : "off")")
+        print("\(battery.source.profileName) battery=\(battery.percent)% automatic-switching=\(enabled ? "on" : "off") hysteresis=\(Policy.hysteresisMargin)%")
         for source in PowerSource.allCases {
             let thresholds = settings[source]
             let current = outcome.modes[source]?.label ?? "unknown"
             let high = thresholds.usesHighPower ? "\(thresholds.highMin)%" : "never"
-            print("\(source.profileName): high>=\(high) auto>=\(thresholds.autoMin)% current=\(current) desired=\(thresholds.mode(at: battery.percent).label)")
+            print("\(source.profileName): high>=\(high) auto>=\(thresholds.autoMin)% current=\(current) desired=\(thresholds.mode(at: battery.percent, holding: outcome.modes[source], margin: Policy.hysteresisMargin).label)")
         }
         print(outcome.applied.isEmpty ? "No change needed" : "Would change: "
             + outcome.applied.map { "\($0.source.profileName) → \($0.mode.label)" }.joined(separator: ", "))

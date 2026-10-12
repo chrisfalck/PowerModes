@@ -20,10 +20,32 @@ struct ContentView: View {
             ForEach(PowerSource.allCases, id: \.self) { source in
                 SourceSection(source: source, controller: controller)
             }
+            Text("A mode steps down only once the charge is \(Policy.hysteresisMargin)% below its threshold, so it does not flip back and forth at the boundary.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Divider()
             Toggle("Switch modes automatically", isOn: $controller.enabled)
                 .toggleStyle(.switch)
                 .controlSize(.small)
+            if controller.needsHelper {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Modes cannot be changed until the helper is installed.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button("Install Helper…") { controller.installHelper() }
+                            .disabled(controller.installingHelper)
+                        if controller.installingHelper {
+                            ProgressView().controlSize(.small)
+                            Text("Waiting for your password…").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .controlSize(.small)
+                }
+            }
             if let problem = controller.problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
