@@ -31,7 +31,7 @@ A mode steps up as soon as the charge reaches its threshold, but steps down only
 
 The margin is measured from the mode the profile is in now, so it also applies to a mode set by hand in System Settings. Moving a slider applies the thresholds exactly, with no margin, so the result matches what the sliders show.
 
-Settings are saved in the `io.github.chrisfalck.power-modes` defaults domain. "Reset to Defaults" restores the table above. "Switch modes automatically" off leaves the modes wherever they are.
+Settings are saved in the `io.github.chrisfalck.power-modes` defaults domain. "Reset to Defaults" restores the table above. "Switch modes automatically" off leaves the modes wherever they are and greys out the sliders, which cannot be changed until it is back on.
 
 ## How it works
 
@@ -82,7 +82,7 @@ pmset -g custom
 sudo -n -l /Library/PrivilegedHelperTools/io.github.chrisfalck.powermodes.helper --set c 0
 ```
 
-`swift test` covers the default thresholds at every charge for both sources, threshold boundaries and clamping, hysteresis, the both-profile plan for every combination of starting modes, and `pmset -g custom` parsing. `--dry-run` prints what the saved settings would do now without changing anything. `--snapshot` renders the popover to a PNG.
+`swift test` covers the default thresholds at every charge for both sources, threshold boundaries and clamping, hysteresis, the both-profile plan for every combination of starting modes, and `pmset -g custom` parsing. `--dry-run` prints what the saved settings would do now without changing anything. `--snapshot` renders the popover to a PNG; add `off` after the file name to render it as it looks with switching off.
 
 ## Uninstall
 

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import PowerPolicy
 
@@ -8,13 +9,24 @@ enum Main {
         let arguments = CommandLine.arguments.dropFirst()
         if arguments.first == "--dry-run" {
             dryRun()
-        } else if arguments.first == "--snapshot", arguments.count == 2 {
-            MainActor.assumeIsolated { snapshot(to: arguments.last!) }
+        } else if arguments.first == "--snapshot", arguments.count == 2 || (arguments.count == 3 && arguments.last == "off") {
+            MainActor.assumeIsolated { snapshot(to: arguments.dropFirst().first!, switchedOff: arguments.count == 3) }
         } else if !arguments.isEmpty {
-            FileHandle.standardError.write(Data("Usage: PowerModes [--dry-run | --snapshot <file.png>]\n".utf8))
+            FileHandle.standardError.write(Data("Usage: PowerModes [--dry-run | --snapshot <file.png> [off]]\n".utf8))
             exit(2)
         } else {
-            PowerModesApp.main()
+            // The launch agent and a manual launch would otherwise fight over the same profiles.
+            let identifier = Bundle.main.bundleIdentifier ?? ""
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+                .filter { $0 != NSRunningApplication.current }
+            if !identifier.isEmpty, !others.isEmpty { exit(0) }
+            MainActor.assumeIsolated {
+                let delegate = AppDelegate()
+                let app = NSApplication.shared
+                app.delegate = delegate
+                app.setActivationPolicy(.accessory)
+                withExtendedLifetime(delegate) { app.run() }
+            }
         }
     }
 
@@ -36,10 +48,15 @@ enum Main {
     }
 
     /// Renders the popover to a PNG, for checking the layout without opening the menu.
+    /// `switchedOff` shows it as it looks with automatic switching off, without touching the saved setting.
     @MainActor
-    private static func snapshot(to path: String) {
+    private static func snapshot(to path: String, switchedOff: Bool) {
         _ = NSApplication.shared
         let controller = PowerController(monitor: false)
+        if switchedOff {
+            controller.persistsChanges = false
+            controller.enabled = false
+        }
         let outcome = PowerController.pass(settings: controller.settings, enabled: false)
         controller.show(outcome)
         let host = NSHostingView(rootView: ContentView(controller: controller))
@@ -54,24 +71,48 @@ enum Main {
     }
 }
 
-struct PowerModesApp: App {
-    @StateObject private var controller = PowerController()
+/// Owns the menu bar item and its popover. A popover sized from the SwiftUI content follows the
+/// content's height as status lines come and go; MenuBarExtra's window kept its tallest size.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let controller = PowerController()
+    private let popover = NSPopover()
+    private var statusItem: NSStatusItem?
+    private var iconUpdates: AnyCancellable?
 
-    init() {
-        // The launch agent and a manual launch would otherwise fight over the same profiles.
-        let identifier = Bundle.main.bundleIdentifier ?? ""
-        let others = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
-            .filter { $0 != NSRunningApplication.current }
-        if !identifier.isEmpty, !others.isEmpty { exit(0) }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let host = NSHostingController(rootView: ContentView(controller: controller))
+        host.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = host
+        popover.behavior = .transient
+
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.target = self
+        item.button?.action = #selector(togglePopover)
+        statusItem = item
+        updateIcon()
+        // objectWillChange fires before the new values are set, so read them on the next turn.
+        iconUpdates = controller.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] in
+            MainActor.assumeIsolated { self?.updateIcon() }
+        }
     }
 
-    var body: some Scene {
-        MenuBarExtra {
-            ContentView(controller: controller)
-        } label: {
-            Image(systemName: controller.menuSymbol)
-                .accessibilityLabel("Power Modes")
+    private func updateIcon() {
+        let image = NSImage(systemSymbolName: controller.menuSymbol, accessibilityDescription: "Power Modes")
+        image?.isTemplate = true
+        statusItem?.button?.image = image
+    }
+
+    @objc private func togglePopover() {
+        guard let button = statusItem?.button else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // An accessory app is not active when its menu bar item is clicked; without this the
+            // popover does not take key focus or close on an outside click.
+            NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController?.view.window?.makeKey()
         }
-        .menuBarExtraStyle(.window)
     }
 }

@@ -17,13 +17,18 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            ForEach(PowerSource.allCases, id: \.self) { source in
-                SourceSection(source: source, controller: controller)
+            // Greyed out and inert while switching is off, so it is obvious nothing here is in effect.
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(PowerSource.allCases, id: \.self) { source in
+                    SourceSection(source: source, controller: controller)
+                }
+                Text("A mode steps down only once the charge is \(Policy.hysteresisMargin)% below its threshold, so it does not flip back and forth at the boundary.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text("A mode steps down only once the charge is \(Policy.hysteresisMargin)% below its threshold, so it does not flip back and forth at the boundary.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            .disabled(!controller.enabled)
+            .opacity(controller.enabled ? 1 : 0.45)
             Divider()
             Toggle("Switch modes automatically", isOn: $controller.enabled)
                 .toggleStyle(.switch)
@@ -58,7 +63,7 @@ struct ContentView: View {
             }
             HStack {
                 Button("Reset to Defaults") { controller.resetToDefaults() }
-                    .disabled(controller.settings == .defaults)
+                    .disabled(controller.settings == .defaults || !controller.enabled)
                 Spacer()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
@@ -72,7 +77,8 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Power Modes").font(.headline)
             if let battery = controller.battery {
-                Text("\(battery.source.profileName) · \(battery.percent)% · \(controller.activeMode?.label ?? "Unknown mode")")
+                Text("\(battery.source.profileName) · \(battery.percent)% · \(controller.activeMode?.label ?? "Unknown mode")"
+                     + (controller.enabled ? "" : " · Switching off"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
@@ -159,6 +165,17 @@ private struct ThresholdSlider: View {
 private struct ZoneBar: View {
     let thresholds: Thresholds
     let percent: Int?
+    @Environment(\.isEnabled) private var isEnabled
+
+    /// Shades of grey while disabled, so the bands stay distinguishable without looking live.
+    private func fill(_ mode: PowerMode) -> Color {
+        guard !isEnabled else { return mode.color }
+        switch mode {
+        case .low: return .gray.opacity(0.45)
+        case .automatic: return .gray.opacity(0.7)
+        case .high: return .gray
+        }
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -167,9 +184,9 @@ private struct ZoneBar: View {
             let highStart = width * CGFloat(min(thresholds.highMin, 100)) / 100
             ZStack(alignment: .leading) {
                 HStack(spacing: 0) {
-                    PowerMode.low.color.frame(width: autoStart)
-                    PowerMode.automatic.color.frame(width: max(0, highStart - autoStart))
-                    PowerMode.high.color
+                    fill(.low).frame(width: autoStart)
+                    fill(.automatic).frame(width: max(0, highStart - autoStart))
+                    fill(.high)
                         .opacity(thresholds.usesHighPower ? 1 : 0)
                 }
                 .opacity(0.75)

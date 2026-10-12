@@ -20,14 +20,14 @@ final class PowerController: ObservableObject {
     @Published var settings: PolicySettings {
         didSet {
             guard settings != oldValue else { return }
-            if let data = try? JSONEncoder().encode(settings) { defaults.set(data, forKey: Self.settingsKey) }
+            if persistsChanges, let data = try? JSONEncoder().encode(settings) { defaults.set(data, forKey: Self.settingsKey) }
             scheduleEvaluation()
         }
     }
     @Published var enabled: Bool {
         didSet {
             guard enabled != oldValue else { return }
-            defaults.set(enabled, forKey: Self.enabledKey)
+            if persistsChanges { defaults.set(enabled, forKey: Self.enabledKey) }
             evaluate()
         }
     }
@@ -38,6 +38,8 @@ final class PowerController: ObservableObject {
     @Published private(set) var needsHelper = false
     @Published private(set) var installingHelper = false
 
+    /// False for a throwaway controller (the off-state snapshot) whose changes must not be saved.
+    var persistsChanges = true
     private let defaults: UserDefaults
     private let queue = DispatchQueue(label: "io.github.chrisfalck.power-modes.apply")
     private var running = false
