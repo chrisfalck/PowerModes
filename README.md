@@ -46,3 +46,7 @@ To remove everything, run `./scripts/uninstall.sh`, then `sudo ./scripts/uninsta
 - The no-dim switch uses a private CoreBrightness API, so it may stop working after a macOS update. If it cannot take its brightness lock, the mode change is refused and the popover shows the error.
 
 More detail on the helper, hysteresis, checks and layout is in [docs/details.md](docs/details.md).
+
+## License
+
+[MIT](LICENSE)
